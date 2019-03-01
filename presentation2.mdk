@@ -1,0 +1,231 @@
+[INCLUDE=presentation]
+Title         : Software Architecture
+Sub Title     : A Pragmatic Approach
+Author        : Daniel D. Vanzin
+Affiliation   : Ahgora Sistemas
+Email         : daniel.vanzin@ahgora.com.br
+Reveal Theme  : sky
+Beamer Theme  : singapore
+
+[TITLE]
+
+## What is software architecture
+- anything that increases the quality of your application
+  -  flexibility, scalability, feasibility, reusability, security...
+- how to write good code, where to put said code
+
+## Common architectures
+- Layered
+- Event-driven
+- Microservices
+- Serveless
+
+## Common layered architectures
+- MVC
+- Clean
+- Hexagonal ( Ports and Adapters )
+- DDD
+- Onion
+
+## Hexagonal
+![hexagonal]
+
+## Clean
+![clean]
+
+## Onion
+![onion]
+
+[onion]: images/onion.png "onion" { width:auto; max-width:90% }
+[clean]: images/clean.jpg "clean" { width:auto; max-width:90% }
+[hexagonal]: images/hexagonal.png "hexagonal" { width:auto; max-width:90% }
+
+## Do you need it?
+- Starting a project
+- A BIG project
+- Frameworks do most of the job
+
+## What is good code
+- code that you want to work on
+- Simple Design
+  - X Passes its tests
+  - - Minimizes duplication
+  - - Maximizes clarity
+  - X Has fewer elements
+
+## How to write good code
+- use any means that motivates you to write better
+- don't use PHP
+- indent with 4 spaces instead of two
+- do something that has a meaning
+
+## Seriously, what is good code?
+- Do only one thing, and do it well. This means **low coupling** and **high coesion**
+  - **low coupling**: when you change one class, you shouldn't have to change another
+  - **high coesion**: put related code together
+
+- Changes should be easy, fast and safe to make
+
+## How to achieve it
+- Use SOLID principles as guidelines.
+- Althought devised for OOP, a functional programming style fits very naturally with them.
+
+- S: Single Responsibility Principle (aka Separation of Concerns)
+  - where do I put new code?
+  - when adding new code, ask 'what is the responsibility of your class?'
+  - if your answer shouldn't includes the word "and"
+  - commonly achieved through a layered architecture
+- O: Open-Closed Principle
+- L: Liskov Substitution Principle
+- I: Interface Segregation Principle
+- D: Dependency Inversion Principle
+
+## Layered architecture
+- The most known architecture pattern
+- Separate code into layers with a well defined responsability
+- Only adjacent layers can talk to each other, and the communication is from top to bottom.
+
+## Layered architecture
+![layered]
+
+[layered]: images/layered.png "layered" { width:auto; max-width:100% }
+
+## Layered architecture
+- There can be many layers with many names, and the granularity may vary
+- presentation: data formatting for the user
+  - aka Controller, UI, View, Http, Router
+- business: application logic
+  - aka Service, Model
+- persistence: get/save from the database
+  - aka Dao, Dal, Repository (DataMapper)
+
+* Also, cross-cutting concerns
+
+## Variations
+- **ActiveRecord**: combines the business and persistence layers
+- **Domain Driven Development (DDD)**
+  - UI (Controller)
+  - application (UseCases): orchestrator, uses domain and infra
+  - domain (Business)
+  - infrastructure (Dao)
+
+## Problems
+- sinkhole anti-pattern: when most requests only pass through the layer, with little or no modification
+  - a good ration is 80/20
+  - if more then that, consider making some layers optional
+
+## Observations
+- the layer doesn't always need to be explicit. A framework may replace most if not all classes that would be part of it
+- if needed to share some services, an open layer is created, below the business, allowing it to be optional
+  - when latency is critical allows to bypass
+
+## Our architecture
+
+- The entry point of the application are the **routes**, defined in `routes.js`.
+- We follow loosely a 2 layer architecture:
+  - **Presentation**: http to model and the reverse
+  - **Domain**: orchestration, business and persistence (ActiveRecord)
+
+- The domain layer may be broken down when needed
+- While assigning code to different places, try to keep in mind the principles of **Separation of Concerns**
+
+- We have a few key **concepts/layers**: stubs, normalizations, model, routes
+
+## Stubs
+- This code is dependency free and framework agnostic*  Serves the following purposes
+  - documentation (developers)
+  - automatic generation (swagger)
+  - routes definition (routes.js)
+  - backend validation (domain)
+  - frontend validation (UI)
+  - UI generation (html)
+
+* Almost, it uses Joi for validation, but it is extremamly declarative and easy to read
+
+## Normalizations
+- This code handles the transformation from the old to the new format.  
+  - The new format is always our latest 'specification'.
+  - is is also always 'correct'. This class needs to deal with fields that don't exist or are in the incorrect format, in order to facilitate business logic
+
+## Model
+- Our **ActiveRecord**, where business logic and persistence is handled. A lot of the code here is validation logic.
+
+- It is important to prevent one **Model Layer** to call another's **Persitence Layer**. Example:
+
+- **leaves.js**
+``` javascript
+  Employees.getOlderThen(date) vs Employees.db.find({'ops.admitted': {$lt: date'}});
+```
+
+## Example
+- What follows is an example of a **create leave** request
+
+``` javascript
+routes.js +stub.js
+  -> **POST /companies/a0000001/leaves**
+      requires authentication? (+security.js)
+      requires authorization? (TODO)
+      convert into a valid representation (automatic, by Hapi/Joi)
+      is it valid?
+        - has correct params, payload, query
+        - has only allowed fields
+        - has required fields
+        - are the fields in the correct format
+        - is the start date lower then the end date
+        - does the employees exist
+        - are the selected motives allowed
+  ```
+
+## Example
+``` javascript
+  -> **model.insert (models/leaves.js)**
+    - add metadata (cod, key, dti...)
+    - toLegacy (normalizations/leaves.js)
+      - (true to '1', add/remove/rename fields)
+    - save
+    - save to history
+    - notify NSQ
+    - return the saved result in the new format (fromLegacy)
+```
+
+## Example
+``` javascript    
+  -> **req.response(returnedValue)**
+    - convert into a valid representation (automatic, by Hapi/Joi)
+```    
+
+## Examples
+- BEST
+  - https://github.com/arcdev1/mm_express_api_example
+- Layered
+  - https://www.coreycleary.me/project-structure-for-an-express-rest-api-when-there-is-no-standard-way/
+- DDD
+  - https://blog.pragmatists.com/refactoring-from-anemic-model-to-ddd-880d3dd3d45f
+- Others
+  - https://github.com/nutboltu/express-restful-starter#readme
+- https://github.com/focusaurus/express_code_structure
+
+## Best References
+- Boa exposição da necessidade de arquitetura em camadas
+  - https://medium.com/the-node-js-collection/clean-node-1df635d176f7
+- Boa dose de sanidade: você não precisa se estressar com arquitetura
+  - https://blog.jbrains.ca/permalink/the-four-elements-of-simple-design
+  - https://blog.thecodewhisperer.com/permalink/putting-an-age-old-battle-to-rest
+- Uma das melhores explicações de uma super arquitetura
+  - https://herbertograca.com/2017/11/16/explicit-architecture-01-ddd-hexagonal-onion-clean-cqrs-how-i-put-it-all-together/
+## Best References
+- Beyond SOLID
+  - http://qualityisspeed.blogspot.com/2014/09/beyond-solid-dependency-elimination.html
+  - http://qualityisspeed.blogspot.com/2015/02/the-dependency-elimination-principle-a-canonical-example.html
+  - http://qualityisspeed.blogspot.com/2015/04/dependency-elimination-example-primitive-support.html
+- Functional SOLID
+  - http://blog.ploeh.dk/2014/03/10/solid-the-next-step-is-functional/
+  - https://softwareengineering.stackexchange.com/questions/165356/equivalent-of-solid-principles-for-functional-programming
+  - https://stackoverflow.com/questions/5577054/solid-for-functional-programming
+
+## Other References
+- https://dzone.com/articles/software-architecture-the-5-patterns-you-need-to-k
+- https://towardsdatascience.com/software-architecture-patterns-98043af8028
+
+- WORST
+  - https://dev.to/remojansen/implementing-the-onion-architecture-in-nodejs-with-typescript-and-inversifyjs-10ad
